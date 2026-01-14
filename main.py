@@ -329,4 +329,9 @@ def main(page: ft.Page):
     atualizar_lista_produtos()
 
 if __name__ == "__main__":
-    ft.app(main)
+    import os
+    # Pega a porta do servidor ou usa 8000 se for local
+    porta = int(os.getenv("PORT", 8000))
+    
+    # Inicia como Site (WEB_BROWSER) na porta correta
+    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta)
