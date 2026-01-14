@@ -4,13 +4,15 @@ import database
 import scraper
 import scheduler
 import config
+import os
+
+# --- Detecta se está rodando na Nuvem (Render) ---
+ON_WEB = os.getenv("PORT") is not None
 
 # --- Tentativa de Importação Segura para Gráficos ---
 try:
-    # Tenta importar diretamente da raiz (versões padrão)
     from flet import LineChartDataPoint
 except ImportError:
-    # Se falhar, define como None para ativar o modo "Lista de Texto"
     LineChartDataPoint = None
 
 def main(page: ft.Page):
@@ -32,7 +34,12 @@ def main(page: ft.Page):
     # --- Funções da Lógica ---
 
     def atualizar_unico_produto(produto):
-        """Força a atualização de um único produto imediatamente"""
+        if ON_WEB:
+            page.snack_bar = ft.SnackBar(ft.Text("Ação bloqueada na versão Web."), bgcolor="grey")
+            page.snack_bar.open = True
+            page.update()
+            return
+
         url = produto['url']
         nome = produto['nome']
         
@@ -98,19 +105,23 @@ def main(page: ft.Page):
                 str_var = "Novo"
                 color_var = "blue"
 
+            btn_refresh = ft.IconButton(ft.Icons.REFRESH, tooltip="Atualizar Agora", icon_color="blue", on_click=lambda e, x=p: atualizar_unico_produto(x), visible=not ON_WEB)
+            btn_delete = ft.IconButton(ft.Icons.DELETE, icon_color="red", tooltip="Remover", on_click=lambda e, id=p['id']: deletar_prod(id), visible=not ON_WEB)
+            
+            switch_ativo = ft.Switch(value=p['ativo'], on_change=lambda e, id=p['id']: toggle_status(id, e), disabled=ON_WEB)
+
             row = ft.DataRow(
                 cells=[
-                    ft.DataCell(ft.Switch(value=p['ativo'], on_change=lambda e, id=p['id']: toggle_status(id, e))),
+                    ft.DataCell(switch_ativo),
                     ft.DataCell(ft.Text(p['nome'], width=200, no_wrap=True, tooltip=p['nome'])),
                     ft.DataCell(ft.Text(p_atual, weight=ft.FontWeight.BOLD)),
                     ft.DataCell(ft.Text(str_var, color=color_var)),
                     ft.DataCell(ft.Text(dt_check)),
                     ft.DataCell(
                         ft.Row([
-                            ft.IconButton(ft.Icons.REFRESH, tooltip="Atualizar Agora", icon_color="blue", on_click=lambda e, x=p: atualizar_unico_produto(x)),
+                            btn_refresh,
                             ft.IconButton(ft.Icons.SHOW_CHART, tooltip="Ver Histórico", on_click=lambda e, x=p: abrir_historico(x)),
-                            ft.IconButton(ft.Icons.DELETE, icon_color="red", tooltip="Remover", on_click=lambda e, id=p['id']: deletar_prod(id)),
-                            # CORREÇÃO 1: Usando propriedade 'url' direta para evitar erro async/await
+                            btn_delete,
                             ft.IconButton(ft.Icons.LINK, tooltip="Abrir Link", url=p['url'])
                         ], spacing=0)
                     ),
@@ -184,7 +195,6 @@ def main(page: ft.Page):
         page.update()
 
     def abrir_historico(produto):
-        """Abre o histórico. Se tiver gráfico, mostra gráfico. Se não, mostra lista."""
         hist = produto.get('historico', [])
         
         if not hist:
@@ -195,7 +205,6 @@ def main(page: ft.Page):
             
         conteudo_modal = None
         
-        # --- OPÇÃO 1: Tenta Gerar Gráfico ---
         if LineChartDataPoint:
             try:
                 data_points = []
@@ -231,12 +240,10 @@ def main(page: ft.Page):
                 conteudo_modal = ft.Container(chart, padding=20, height=300, width=500)
             except Exception as e:
                 print(f"Falha ao gerar gráfico: {e}")
-                conteudo_modal = None # Fallback para lista
+                conteudo_modal = None 
         
-        # --- OPÇÃO 2: Lista de Texto (Fallback) ---
         if conteudo_modal is None:
             lista_hist = ft.ListView(expand=1, spacing=10, padding=20, height=300)
-            # Inverte para mostrar o mais recente no topo
             for h in reversed(hist):
                 dt = datetime.fromisoformat(h['data']).strftime('%d/%m/%Y às %H:%M')
                 pr = f"R$ {h['preco']:.2f}"
@@ -246,7 +253,6 @@ def main(page: ft.Page):
                             ft.Text(dt, color="grey"),
                             ft.Text(pr, weight=ft.FontWeight.BOLD, color="white")
                         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        # CORREÇÃO 2: Border.only (Maiúsculo)
                         border=ft.Border.only(bottom=ft.BorderSide(1, "white10"))
                     )
                 )
@@ -262,15 +268,17 @@ def main(page: ft.Page):
 
     # --- Elementos da UI ---
     
-    txt_url = ft.TextField(hint_text="Cole o Link do Produto aqui...", expand=True)
-    btn_add = ft.FilledButton("Adicionar", icon=ft.Icons.ADD, on_click=adicionar_click)
-    btn_cookie = ft.IconButton(ft.Icons.COOKIE, tooltip="Configurar Cookie", on_click=abrir_modal_cookie)
+    txt_url = ft.TextField(hint_text="Cole o Link do Produto aqui...", expand=True, visible=not ON_WEB)
+    btn_add = ft.FilledButton("Adicionar", icon=ft.Icons.ADD, on_click=adicionar_click, visible=not ON_WEB)
+    btn_cookie = ft.IconButton(ft.Icons.COOKIE, tooltip="Configurar Cookie", on_click=abrir_modal_cookie, visible=not ON_WEB)
     
+    titulo_texto = "Monitor ML (Web Dashboard)" if ON_WEB else "Monitor de Preços ML 2.0"
     header = ft.Row([txt_url, btn_add, btn_cookie], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    if ON_WEB:
+        header = ft.Container(ft.Text("Modo Visualização - Gerencie pelo PC", color="grey", italic=True))
     
-    btn_monitor = ft.FilledButton("INICIAR MONITOR", icon=ft.Icons.PLAY_ARROW, style=ft.ButtonStyle(bgcolor="green400"), on_click=toggle_monitor, height=50)
+    btn_monitor = ft.FilledButton("INICIAR MONITOR", icon=ft.Icons.PLAY_ARROW, style=ft.ButtonStyle(bgcolor="green400"), on_click=toggle_monitor, height=50, visible=not ON_WEB)
     filtro_nome = ft.TextField(label="Filtrar nome...", width=200, on_change=atualizar_lista_produtos, prefix_icon=ft.Icons.SEARCH)
-    
     controls = ft.Row([btn_monitor, filtro_nome], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
     
     tabela = ft.DataTable(
@@ -283,18 +291,31 @@ def main(page: ft.Page):
             ft.DataColumn(ft.Text("Ações")),
         ],
         rows=[],
-        expand=True,
         border=ft.Border.all(1, "white10"),
         vertical_lines=ft.border.BorderSide(1, "white10"),
     )
+
+    tabela_scroll = ft.Column(
+        [tabela],
+        scroll=ft.ScrollMode.AUTO,
+        expand=True,
+    )
     
     txt_log = ft.Text(value="Sistema Inicializado...\n", font_family="Consolas", size=12, color="green300")
-    log_container = ft.Container(
-        content=ft.Column([txt_log], scroll=ft.ScrollMode.ALWAYS),
-        height=150,
-        bgcolor="black54",
-        padding=10,
-        border_radius=5
+    
+    # CORREÇÃO: Removido initially_expanded=False pois estava causando erro
+    log_expander = ft.ExpansionTile(
+        title=ft.Text("Logs do Sistema", weight=ft.FontWeight.BOLD, size=14),
+        subtitle=ft.Text("Clique para ver detalhes", italic=True, size=12),
+        controls=[
+            ft.Container(
+                content=ft.Column([txt_log], scroll=ft.ScrollMode.ALWAYS),
+                height=200, 
+                bgcolor="black54",
+                padding=10,
+                border_radius=5
+            )
+        ]
     )
 
     txt_cookie_input = ft.TextField(label="Cole o Cookie aqui", multiline=True)
@@ -303,24 +324,21 @@ def main(page: ft.Page):
         content=txt_cookie_input,
         actions=[ft.TextButton("Salvar", on_click=salvar_cookie_click)]
     )
+    dlg_grafico = ft.AlertDialog(title=ft.Text("Gráfico"), content=ft.Container())
     
-    dlg_grafico = ft.AlertDialog(
-        title=ft.Text("Gráfico"),
-        content=ft.Container()
-    )
     page.dialog = dlg_grafico
     page.overlay.append(dlg_cookie)
     page.overlay.append(dlg_grafico)
 
     page.add(
-        ft.Text("Monitor de Preços ML 2.0", size=30, weight=ft.FontWeight.BOLD),
+        ft.Text(titulo_texto, size=30, weight=ft.FontWeight.BOLD),
         header,
         ft.Divider(),
         controls,
         ft.Divider(),
-        ft.Container(tabela, expand=True, border_radius=10),
-        ft.Text("Logs do Sistema:", weight=ft.FontWeight.BOLD),
-        log_container
+        tabela_scroll,
+        ft.Divider(),
+        log_expander
     )
     
     headers = config.get_headers()
@@ -329,9 +347,10 @@ def main(page: ft.Page):
     atualizar_lista_produtos()
 
 if __name__ == "__main__":
-    import os
-    # Pega a porta do servidor ou usa 8000 se for local
-    porta = int(os.getenv("PORT", 8000))
-    
-    # Inicia como Site (WEB_BROWSER) na porta correta
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta)
+    porta_render = os.getenv("PORT")
+    if porta_render:
+        # Se estiver no Render, usa a porta definida
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=int(porta_render))
+    else:
+        # Se for local, roda normal (ignora o aviso de depreciação por enquanto pois app(main) funciona)
+        ft.app(target=main)
