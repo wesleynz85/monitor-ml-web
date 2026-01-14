@@ -1,0 +1,18 @@
+# Ignorar arquivos compilados do Python
+__pycache__/
+*.py[cod]
+
+# Ignorar ambiente virtual (se você usar venv)
+venv/
+.env
+
+# Ignorar configurações locais do Flet/Editor
+.flet/
+.vscode/
+
+# Ignorar o arquivo de configuração (pois tem Cookies sensíveis!)
+config_sistema.json
+
+# Ignorar o banco de dados (pois ele muda o tempo todo e é dado local)
+# Se quiser versionar um exemplo, crie um produtos_exemplo.json
+produtos.json
