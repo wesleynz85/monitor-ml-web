@@ -1,71 +1,81 @@
-import json
-import os
+from db_conn import supabase
 from datetime import datetime
 
-DB_FILE = "produtos.json"
+# Não precisamos mais de ARQUIVO_JSON
 
 def carregar_dados():
-    if not os.path.exists(DB_FILE):
-        return []
+    """Busca todos os produtos do Supabase ordenados por ID"""
     try:
-        with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
+        response = supabase.table("produtos").select("*").order("id").execute()
+        return response.data
+    except Exception as e:
+        print(f"Erro ao carregar dados: {e}")
         return []
-
-def salvar_dados(dados):
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(dados, f, indent=4, ensure_ascii=False)
 
 def adicionar_produto(url, nome, preco):
-    dados = carregar_dados()
-    # Verifica duplicidade por URL limpa
-    url_limpa = url.split('?')[0]
-    for p in dados:
-        if p['url'] == url_limpa:
-            return False, "Produto já existe!"
-    
-    agora = datetime.now().isoformat()
-    novo = {
-        "id": int(datetime.now().timestamp()), # ID simples
-        "nome": nome,
-        "url": url_limpa,
-        "preco_atual": preco,
-        "ativo": True,
-        "ultimo_check": agora,
-        "historico": [{"data": agora, "preco": preco}]
-    }
-    dados.append(novo)
-    salvar_dados(dados)
-    return True, "Produto adicionado!"
+    """Insere um novo produto na nuvem"""
+    # Verifica duplicidade
+    try:
+        # Busca se já existe URL igual
+        check = supabase.table("produtos").select("id").eq("url", url.split('?')[0]).execute()
+        if check.data:
+            return False, "Produto já existe no banco!"
+
+        agora = datetime.now().isoformat()
+        novo_produto = {
+            "nome": nome,
+            "url": url.split('?')[0],
+            "preco_atual": preco,
+            "ativo": True,
+            "ultimo_check": agora,
+            "historico": [{"data": agora, "preco": preco}] # Supabase aceita JSON direto
+        }
+        
+        supabase.table("produtos").insert(novo_produto).execute()
+        return True, "Produto adicionado na Nuvem!"
+    except Exception as e:
+        return False, str(e)
 
 def atualizar_preco_produto(id_prod, novo_preco):
-    dados = carregar_dados()
-    for p in dados:
-        if p['id'] == id_prod:
-            agora = datetime.now().isoformat()
-            p['ultimo_check'] = agora
-            
-            # Só adiciona ao histórico se o preço mudou ou se o histórico está vazio
-            if not p['historico'] or p['historico'][-1]['preco'] != novo_preco:
-                p['historico'].append({"data": agora, "preco": novo_preco})
-                # Limita histórico a 100 itens para não pesar
-                if len(p['historico']) > 100:
-                    p['historico'].pop(0)
-            
-            p['preco_atual'] = novo_preco
-            break
-    salvar_dados(dados)
+    """Atualiza preço e histórico no Supabase"""
+    try:
+        # 1. Busca o histórico atual
+        res = supabase.table("produtos").select("historico, preco_atual").eq("id", id_prod).execute()
+        if not res.data: return
+
+        produto = res.data[0]
+        historico = produto.get('historico', [])
+        agora = datetime.now().isoformat()
+
+        # Só atualiza histórico se mudou preço ou está vazio
+        if not historico or historico[-1]['preco'] != novo_preco:
+            historico.append({"data": agora, "preco": novo_preco})
+            # Limita tamanho do histórico para não estourar o banco (opcional)
+            if len(historico) > 100:
+                historico.pop(0)
+
+        # 2. Envia atualização
+        dados_update = {
+            "preco_atual": novo_preco,
+            "ultimo_check": agora,
+            "historico": historico
+        }
+        
+        supabase.table("produtos").update(dados_update).eq("id", id_prod).execute()
+        
+    except Exception as e:
+        print(f"Erro ao atualizar ID {id_prod}: {e}")
 
 def toggle_ativo(id_prod, status):
-    dados = carregar_dados()
-    for p in dados:
-        if p['id'] == id_prod:
-            p['ativo'] = status
-            break
-    salvar_dados(dados)
+    """Liga/Desliga monitoramento na nuvem"""
+    try:
+        supabase.table("produtos").update({"ativo": status}).eq("id", id_prod).execute()
+    except Exception as e:
+        print(f"Erro ao mudar status: {e}")
 
 def remover_produto(id_prod):
-    dados = carregar_dados()
-    novos_dados = [p for p in dados if p['id'] != id_prod]
-    salvar_dados(novos_dados)
+    """Deleta do banco"""
+    try:
+        supabase.table("produtos").delete().eq("id", id_prod).execute()
+    except Exception as e:
+        print(f"Erro ao deletar: {e}")
