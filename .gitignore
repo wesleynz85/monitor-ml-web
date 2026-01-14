@@ -1,18 +1,44 @@
-# Ignorar arquivos compilados do Python
+# --- Segurança (CRÍTICO) ---
+.env
+config_sistema.json
+senhas.txt
+
+# --- Python ---
 __pycache__/
 *.py[cod]
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Ignorar ambiente virtual (se você usar venv)
+# --- Ambientes Virtuais ---
 venv/
-.env
+.venv/
+env/
 
-# Ignorar configurações locais do Flet/Editor
-.flet/
+# --- IDEs e Editores ---
 .vscode/
+.idea/
+*.swp
 
-# Ignorar o arquivo de configuração (pois tem Cookies sensíveis!)
-config_sistema.json
+# --- Flet / Build ---
+.flet/
+flet-build/
 
-# Ignorar o banco de dados (pois ele muda o tempo todo e é dado local)
-# Se quiser versionar um exemplo, crie um produtos_exemplo.json
-produtos.json
+# --- Banco de dados local (Opcional) ---
+# Se você quiser que o banco local NUNCA suba:
+# produtos.json
